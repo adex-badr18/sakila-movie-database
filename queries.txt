@@ -1,0 +1,109 @@
+/* Query 1 - The query used for first insight. */
+WITH film_rent_count AS 
+        (SELECT film_id, 
+                COUNT(rental_id) rental_count
+        FROM inventory i
+        JOIN rental r
+        ON i.inventory_id = r.inventory_id
+        GROUP BY 1
+        ORDER BY 2 DESC),
+categories AS 
+        (SELECT f.film_id,
+                f.title film_title,
+                c.name category_name
+        FROM film f
+        JOIN film_category fc
+        ON f.film_id = fc.film_id
+        JOIN category c
+        ON fc.category_id = c.category_id
+        WHERE c.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music'))
+SELECT  category_name, 
+        SUM(rental_count) total_rents
+FROM film_rent_count frc
+JOIN categories cat
+ON frc.film_id = cat.film_id
+GROUP BY 1
+ORDER BY 2 DESC;
+
+/* Query 2 - The query used for second insight. */
+WITH top_ten AS (SELECT c.customer_id,
+                        CONCAT(c.first_name, ' ', c.last_name) full_name,
+                        SUM(p.amount)
+                FROM customer c
+                JOIN payment p
+                ON c.customer_id = p.customer_id
+                GROUP BY 1, 2
+                ORDER BY 3 DESC, 2
+                LIMIT 10),
+details AS (SELECT  c.customer_id,
+                        c.first_name || ' ' || c.last_name full_name,
+                        DATE_TRUNC('month', p.payment_date) pay_month,
+                        COUNT(p.payment_id) pay_count,
+                        SUM(p.amount) total_amount
+                FROM customer c
+                JOIN payment p
+                ON c.customer_id = p.customer_id
+                WHERE DATE_PART('year', p.payment_date) = 2007
+                GROUP BY 1, 3, 2
+                ORDER BY 4 DESC)
+
+SELECT  d.full_name,
+        SUM(d.pay_count) payment_count,
+        SUM(d.total_amount) total_payment
+FROM top_ten tt
+JOIN details d
+ON tt.customer_id = d.customer_id
+GROUP BY 1
+ORDER BY 3 DESC;
+
+
+/* Query 3 - The query used for third insight. */
+WITH top_ten AS (SELECT c.customer_id,
+                        CONCAT(c.first_name, ' ', c.last_name) full_name,
+                        SUM(p.amount)
+                FROM customer c
+                JOIN payment p
+                ON c.customer_id = p.customer_id
+                GROUP BY 1, 2
+                ORDER BY 3 DESC, 2
+                LIMIT 10),
+details AS (SELECT  c.customer_id,
+                        DATE_TRUNC('month', p.payment_date) pay_month,
+                        COUNT(p.payment_id) pay_count,
+                        SUM(p.amount) total_amount
+                FROM customer c
+                JOIN payment p
+                ON c.customer_id = p.customer_id
+                WHERE DATE_PART('year', p.payment_date) = 2007
+                GROUP BY 1, 2
+                ORDER BY 4 DESC)
+
+SELECT  full_name,
+        MAX(pay_difference) highest_pay_difference
+FROM(SELECT d.pay_month,
+        tt.full_name,
+        d.pay_count,
+        d.total_amount,
+        LEAD(d.total_amount) OVER(PARTITION BY tt.full_name ORDER BY d.total_amount) - d.total_amount pay_difference
+FROM top_ten tt
+JOIN details d
+ON tt.customer_id = d.customer_id
+ORDER BY 2, 1) sub
+GROUP BY 1
+ORDER BY 2 DESC;
+
+/* Query 4 - The query used for fourth insight. */
+
+SELECT DATE_PART('month', r.rental_date) rental_month,
+        DATE_PART('year', r.rental_date) rental_year,
+        s.store_id,
+        COUNT(r.rental_id) rental_count
+FROM store s
+JOIN staff st
+ON s.store_id = st.store_id
+JOIN rental r
+ON r.staff_id = st.staff_id
+JOIN payment p
+ON p.rental_id = r.rental_id
+GROUP BY 1, 2, 3
+ORDER BY 4 DESC;
